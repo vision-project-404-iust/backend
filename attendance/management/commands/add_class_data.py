@@ -123,7 +123,7 @@ class Command(BaseCommand):
         
         analysis = DeepFace.analyze(face_crop, actions=['emotion'], enforce_detection=False)
 
-        return analysis['emotion']
+        return analysis[0]['emotion']
 
 
     def get_top_match(self, box, frame):
