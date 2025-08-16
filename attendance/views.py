@@ -1,8 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.shortcuts import get_object_or_404
-from django.db.models import Count, Q
+from django.db.models import Count
 from .models import StudentData
 
 
@@ -112,23 +111,21 @@ class GetStudentOverallStatus(APIView):
             Response: List of student attendance data
         """
         try:
-            # Get all unique student IDs
-            student_ids = StudentData.objects.values_list('studentID', flat=True).distinct()
-            
             total_classes = StudentData.objects.values('ClassID').distinct().count()
             
+            # Efficiently get student attendance data with single query
+            student_stats = (
+                StudentData.objects
+                .values('studentID')
+                .annotate(classes_attended=Count('ClassID', distinct=True))
+                .order_by('studentID')
+            )
+            
             student_data = []
-            for student_id in student_ids:
-                # Get all records for this student
-                student_records = StudentData.objects.filter(studentID=student_id)
-                
-                # Count unique classes attended
-                classes_attended = student_records.values('ClassID').distinct().count()
-                
-                
+            for stats in student_stats:
                 student_data.append({
-                    'studentID': student_id,
-                    'classesAttended': classes_attended,
+                    'studentID': stats['studentID'],
+                    'classesAttended': stats['classes_attended'],
                     'totalClasses': total_classes
                 })
             
@@ -191,9 +188,14 @@ class GetStudentsDetailStatus(APIView):
                         'emotionSummary': emotion_summary
                     }
                 
+                # Calculate overall attendance percentage
+                overall_attendance_percentage = 0.0
+                if total_classes > 0:
+                    overall_attendance_percentage = round((classes_attended / total_classes) * 100, 2)
+                
                 students_detail[student_id] = {
                     'overallAttendance': {
-                        'overallAttendance': round(classes_attended / total_classes, 2),
+                        'overallAttendance': overall_attendance_percentage,
                         'classesAttended': classes_attended
                     },
                     'classMentioned': list(class_breakdown.keys()),
@@ -277,7 +279,7 @@ class GetClassDetailStatus(APIView):
                 
                 class_detail[class_id] = {
                     'attendanceRate': round(attendance_rate, 2),
-                    'presentStudents': total_students,
+                    'presentStudents': total_students_in_class,
                     'emotionDistribution': emotion_distribution,
                     'studentBreakdown': student_breakdown
                 }

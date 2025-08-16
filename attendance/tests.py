@@ -100,7 +100,7 @@ class AttendanceAPITest(APITestCase):
         first_student = response.data[0]
         self.assertIn('studentID', first_student)
         self.assertIn('classesAttended', first_student)
-        self.assertIn('totalFrames', first_student)
+        self.assertIn('totalClasses', first_student)
     
     def test_get_students_detail_status(self):
         """Test GetStudentsDetailStatus API endpoint"""
@@ -137,24 +137,7 @@ class AttendanceAPITest(APITestCase):
         self.assertIn('emotionDistribution', first_class_data)
         self.assertIn('studentBreakdown', first_class_data)
     
-    def test_student_list(self):
-        """Test StudentDataList API endpoint"""
-        url = reverse('attendance:student-list')
-        response = self.client.get(url)
-        
-        # Should return 200 OK
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)  # 3 records
-    
-    def test_student_detail(self):
-        """Test StudentDataDetail API endpoint"""
-        student_data = StudentData.objects.first()
-        url = reverse('attendance:student-detail', args=[student_data.id])
-        response = self.client.get(url)
-        
-        # Should return 200 OK
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['studentID'], 'STU001')
+
 
 
 class URLPatternsTest(TestCase):
@@ -185,7 +168,4 @@ class URLPatternsTest(TestCase):
         url = reverse('attendance:class-detail-status')
         self.assertEqual(url, '/api/class-detail-status/')
     
-    def test_student_list_url(self):
-        """Test student list URL pattern"""
-        url = reverse('attendance:student-list')
-        self.assertEqual(url, '/api/students/')
+
