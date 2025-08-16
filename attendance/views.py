@@ -4,7 +4,6 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q
 from .models import StudentData
-from .serializers import StudentDataSerializer
 
 
 class GetAttendanceStatus(APIView):
@@ -43,7 +42,7 @@ class GetAttendanceStatus(APIView):
                     'classID': class_id,
                     'attendanceRate': round(attendance_rate, 2),
                     'totalStudents': total_students,
-                    'attendedStudents': total_students  # Since we only have records for present students
+                    'attendedStudents': attended_students
                 })
             
             return Response(attendance_data, status=status.HTTP_200_OK)
@@ -116,6 +115,8 @@ class GetStudentOverallStatus(APIView):
             # Get all unique student IDs
             student_ids = StudentData.objects.values_list('studentID', flat=True).distinct()
             
+            total_classes = StudentData.objects.values('ClassID').distinct().count()
+            
             student_data = []
             for student_id in student_ids:
                 # Get all records for this student
@@ -124,13 +125,11 @@ class GetStudentOverallStatus(APIView):
                 # Count unique classes attended
                 classes_attended = student_records.values('ClassID').distinct().count()
                 
-                # Calculate total frames attended
-                total_frames = student_records.count()
                 
                 student_data.append({
                     'studentID': student_id,
                     'classesAttended': classes_attended,
-                    'totalFrames': total_frames
+                    'totalClasses': total_classes
                 })
             
             return Response(student_data, status=status.HTTP_200_OK)
@@ -159,14 +158,15 @@ class GetStudentsDetailStatus(APIView):
             # Get all unique student IDs
             student_ids = StudentData.objects.values_list('studentID', flat=True).distinct()
             
+            total_classes = StudentData.objects.values('ClassID').distinct().count()
+            
             students_detail = {}
             for student_id in student_ids:
                 # Get all records for this student
                 student_records = StudentData.objects.filter(studentID=student_id)
                 
                 # Calculate overall attendance
-                total_classes = student_records.values('ClassID').distinct().count()
-                total_frames = student_records.count()
+                classes_attended = student_records.values('ClassID').distinct().count()
                 
                 # Get class breakdown data
                 class_breakdown = {}
@@ -174,7 +174,7 @@ class GetStudentsDetailStatus(APIView):
                 
                 for class_data in unique_classes:
                     class_id = class_data['ClassID']
-                    class_records = student_records.filter(ClassID=class_id)
+                    class_records = student_records.filter(ClassID=class_id, studentID=student_id)
                     
                     # Calculate emotion summary for this class
                     emotion_summary = {}
@@ -193,8 +193,8 @@ class GetStudentsDetailStatus(APIView):
                 
                 students_detail[student_id] = {
                     'overallAttendance': {
-                        'totalClasses': total_classes,
-                        'totalFrames': total_frames
+                        'overallAttendance': round(classes_attended / total_classes, 2),
+                        'classesAttended': classes_attended
                     },
                     'classMentioned': list(class_breakdown.keys()),
                     'classBreakdown': class_breakdown
@@ -226,20 +226,22 @@ class GetClassDetailStatus(APIView):
             # Get all unique class IDs
             class_ids = StudentData.objects.values_list('ClassID', flat=True).distinct()
             
+            total_students = StudentData.objects.values('studentID').distinct().count()
+            
             class_detail = {}
             for class_id in class_ids:
                 # Get all records for this class
                 class_records = StudentData.objects.filter(ClassID=class_id)
                 
                 # Get unique students in this class
-                unique_students = class_records.values('studentID').distinct()
-                total_students = unique_students.count()
+                unique_students_in_class = class_records.values('studentID').distinct()
+                total_students_in_class = unique_students_in_class.count()
                 
                 # Calculate attendance rate
                 attendance_rate = 0.0
                 if total_students > 0:
                     # Count students who have any records (attended)
-                    attended_students = total_students
+                    attended_students = total_students_in_class
                     attendance_rate = (attended_students / total_students) * 100
                 
                 # Aggregate emotion distribution across all students in class
@@ -254,7 +256,7 @@ class GetClassDetailStatus(APIView):
                 
                 # Get student breakdown data
                 student_breakdown = {}
-                for student_data in unique_students:
+                for student_data in unique_students_in_class:
                     student_id = student_data['studentID']
                     student_records = class_records.filter(studentID=student_id)
                     
@@ -287,26 +289,3 @@ class GetClassDetailStatus(APIView):
                 {'error': f'Error retrieving class detail status: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
-# Additional utility views for development and testing
-class StudentDataList(APIView):
-    """
-    List all student data records (for development/testing)
-    """
-    
-    def get(self, request):
-        students = StudentData.objects.all().order_by('-created_at')
-        serializer = StudentDataSerializer(students, many=True)
-        return Response(serializer.data)
-
-
-class StudentDataDetail(APIView):
-    """
-    Retrieve a specific student data record (for development/testing)
-    """
-    
-    def get(self, request, pk):
-        student = get_object_or_404(StudentData, pk=pk)
-        serializer = StudentDataSerializer(student)
-        return Response(serializer.data)

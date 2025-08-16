@@ -107,12 +107,12 @@ All API endpoints are prefixed with `/api/`
   {
     "studentID": "STU001",
     "classesAttended": 3,
-    "totalFrames": 25
+    "totalClasses": 25
   },
   {
     "studentID": "STU002",
     "classesAttended": 2,
-    "totalFrames": 18
+    "totalClasses": 18
   }
 ]
 ```
@@ -126,8 +126,8 @@ All API endpoints are prefixed with `/api/`
 {
   "STU001": {
     "overallAttendance": {
-      "totalClasses": 3,
-      "totalFrames": 25
+      "overallAttendance": 0.92,
+      "classesAttended": 25
     },
     "classMentioned": [101, 102, 103],
     "classBreakdown": {
