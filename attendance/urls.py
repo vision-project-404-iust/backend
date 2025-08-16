@@ -5,8 +5,11 @@ app_name = 'attendance'
 
 urlpatterns = [
     # Main API endpoints
-    path('student/<str:student_id>/status/', views.GetStudentOverallStatus.as_view(), name='student-overall-status'),
-    path('class/<int:class_id>/status/', views.GetClassStatus.as_view(), name='class-status'),
+    path('attendance-status/', views.GetAttendanceStatus.as_view(), name='attendance-status'),
+    path('emotions-status/', views.GetEmotionsStatus.as_view(), name='emotions-status'),
+    path('student-overall-status/', views.GetStudentOverallStatus.as_view(), name='student-overall-status'),
+    path('students-detail-status/', views.GetStudentsDetailStatus.as_view(), name='students-detail-status'),
+    path('class-detail-status/', views.GetClassDetailStatus.as_view(), name='class-detail-status'),
     
     # Development/testing endpoints
     path('students/', views.StudentDataList.as_view(), name='student-list'),

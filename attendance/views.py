@@ -4,227 +4,289 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q
 from .models import StudentData
-from .serializers import (
-    StudentDataSerializer,
-    StudentOverallStatusSerializer,
-    ClassStatusSerializer
-)
+from .serializers import StudentDataSerializer
+
+
+class GetAttendanceStatus(APIView):
+    """
+    API endpoint to get attendance rate of all classIDs as a list
+    """
+    
+    def get(self, request):
+        """
+        Get attendance rate for all classes
+        
+        Returns:
+            Response: List of attendance rates for all classes
+        """
+        try:
+            # Get all unique class IDs
+            class_ids = StudentData.objects.values_list('ClassID', flat=True).distinct()
+            
+            attendance_data = []
+            for class_id in class_ids:
+                # Get all records for this class
+                class_records = StudentData.objects.filter(ClassID=class_id)
+                
+                # Get unique students in this class
+                unique_students = class_records.values('studentID').distinct()
+                total_students = unique_students.count()
+                
+                # Calculate attendance rate
+                attendance_rate = 0.0
+                if total_students > 0:
+                    # Count students who have any records (attended)
+                    attended_students = unique_students.count()
+                    attendance_rate = (attended_students / total_students) * 100
+                
+                attendance_data.append({
+                    'classID': class_id,
+                    'attendanceRate': round(attendance_rate, 2),
+                    'totalStudents': total_students,
+                    'attendedStudents': total_students  # Since we only have records for present students
+                })
+            
+            return Response(attendance_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error retrieving attendance status: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetEmotionsStatus(APIView):
+    """
+    API endpoint to get emotions distribution of all classes as a list
+    """
+    
+    def get(self, request):
+        """
+        Get emotions distribution for all classes
+        
+        Returns:
+            Response: List of emotions distribution for all classes
+        """
+        try:
+            # Get all unique class IDs
+            class_ids = StudentData.objects.values_list('ClassID', flat=True).distinct()
+            
+            emotions_data = []
+            for class_id in class_ids:
+                # Get all records for this class
+                class_records = StudentData.objects.filter(ClassID=class_id)
+                
+                # Aggregate emotion distribution across all students in class
+                emotion_distribution = {}
+                for record in class_records:
+                    if isinstance(record.Emotion, dict):
+                        for emotion, value in record.Emotion.items():
+                            if emotion in emotion_distribution:
+                                emotion_distribution[emotion] += value
+                            else:
+                                emotion_distribution[emotion] = value
+                
+                emotions_data.append({
+                    'classID': class_id,
+                    'emotionDistribution': emotion_distribution
+                })
+            
+            return Response(emotions_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error retrieving emotions status: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class GetStudentOverallStatus(APIView):
     """
-    API endpoint to get overall status of a specific student
+    API endpoint to get a list of how many classes each student attended
     """
     
-    def get(self, request, student_id):
+    def get(self, request):
         """
-        Get overall attendance and emotion status for a specific student
+        Get overall attendance status for all students
         
-        Args:
-            student_id (str): The student ID to get status for
-            
         Returns:
-            Response: Student overall status data
+            Response: List of student attendance data
         """
         try:
-            # Get all records for the student
-            student_records = StudentData.objects.filter(studentID=student_id)
+            # Get all unique student IDs
+            student_ids = StudentData.objects.values_list('studentID', flat=True).distinct()
             
-            if not student_records.exists():
-                return Response(
-                    {'error': f'No records found for student {student_id}'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            # Calculate total unique classes
-            total_classes = student_records.values('ClassID').distinct().count()
-            
-            # Calculate attended classes (assuming presence in any frame means attendance)
-            attended_classes = student_records.values('ClassID').distinct().count()
-            
-            # Calculate attendance rate
-            attendance_rate = (attended_classes / total_classes * 100) if total_classes > 0 else 0.0
-            
-            # Aggregate emotion data across all records
-            emotion_summary = {}
-            for record in student_records:
-                if isinstance(record.Emotion, dict):
-                    for emotion, value in record.Emotion.items():
-                        if emotion in emotion_summary:
-                            emotion_summary[emotion] += value
-                        else:
-                            emotion_summary[emotion] = value
-            
-            # Calculate overall status based on attendance rate and emotion
-            overall_status = self._calculate_overall_status(attendance_rate, emotion_summary)
-            
-            response_data = {
-                'studentID': student_id,
-                'overall_status': overall_status,
-                'total_classes': total_classes,
-                'attended_classes': attended_classes,
-                'attendance_rate': round(attendance_rate, 2),
-                'emotion_summary': emotion_summary
-            }
-            
-            serializer = StudentOverallStatusSerializer(response_data)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response(
-                {'error': f'Error retrieving student status: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    def _calculate_overall_status(self, attendance_rate, emotion_summary):
-        """
-        Calculate overall status based on attendance rate and emotion data
-        """
-        if attendance_rate >= 90:
-            base_status = 'Excellent'
-        elif attendance_rate >= 80:
-            base_status = 'Good'
-        elif attendance_rate >= 70:
-            base_status = 'Fair'
-        else:
-            base_status = 'Poor'
-        
-        # Consider emotion data for final status
-        if emotion_summary:
-            # Calculate average positive emotions if they exist
-            positive_emotions = ['happy', 'joy', 'excited', 'content', 'positive']
-            negative_emotions = ['sad', 'angry', 'fear', 'disgust', 'negative']
-            
-            positive_score = sum(emotion_summary.get(emotion, 0) for emotion in positive_emotions)
-            negative_score = sum(emotion_summary.get(emotion, 0) for emotion in negative_emotions)
-            
-            if positive_score > negative_score and positive_score > 0:
-                if base_status == 'Poor':
-                    return 'Fair'
-                elif base_status == 'Fair':
-                    return 'Good'
-        
-        return base_status
-
-
-class GetClassStatus(APIView):
-    """
-    API endpoint to get status of a specific class
-    """
-    
-    def get(self, request, class_id):
-        """
-        Get attendance and emotion status for a specific class
-        
-        Args:
-            class_id (int): The class ID to get status for
-            
-        Returns:
-            Response: Class status data
-        """
-        try:
-            # Get all records for the class
-            class_records = StudentData.objects.filter(ClassID=class_id)
-            
-            if not class_records.exists():
-                return Response(
-                    {'error': f'No records found for class {class_id}'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            # Calculate total unique students in class
-            total_students = class_records.values('studentID').distinct().count()
-            
-            # Calculate present students (students who appear in any frame)
-            present_students = class_records.values('studentID').distinct().count()
-            
-            # Calculate absent students (this would need additional logic based on expected students)
-            # For now, assuming all students in records are present
-            absent_students = 0
-            
-            # Calculate class attendance rate
-            attendance_rate = (present_students / total_students * 100) if total_students > 0 else 0.0
-            
-            # Aggregate emotion distribution across all students in class
-            emotion_distribution = {}
-            for record in class_records:
-                if isinstance(record.Emotion, dict):
-                    for emotion, value in record.Emotion.items():
-                        if emotion in emotion_distribution:
-                            emotion_distribution[emotion] += value
-                        else:
-                            emotion_distribution[emotion] = value
-            
-            # Get list of students with their individual status
-            students_list = []
-            unique_students = class_records.values('studentID').distinct()
-            
-            for student_data in unique_students:
-                student_id = student_data['studentID']
-                student_records = class_records.filter(studentID=student_id)
+            student_data = []
+            for student_id in student_ids:
+                # Get all records for this student
+                student_records = StudentData.objects.filter(studentID=student_id)
                 
-                # Calculate student's emotion summary for this class
-                student_emotion_summary = {}
-                for record in student_records:
-                    if isinstance(record.Emotion, dict):
-                        for emotion, value in record.Emotion.items():
-                            if emotion in student_emotion_summary:
-                                student_emotion_summary[emotion] += value
-                            else:
-                                student_emotion_summary[emotion] = value
+                # Count unique classes attended
+                classes_attended = student_records.values('ClassID').distinct().count()
                 
-                # Calculate student's status for this class
-                student_status = self._calculate_student_class_status(student_emotion_summary)
+                # Calculate total frames attended
+                total_frames = student_records.count()
                 
-                students_list.append({
+                student_data.append({
                     'studentID': student_id,
-                    'status': student_status,
-                    'emotion_summary': student_emotion_summary,
-                    'frames_attended': student_records.count()
+                    'classesAttended': classes_attended,
+                    'totalFrames': total_frames
                 })
             
-            response_data = {
-                'ClassID': class_id,
-                'total_students': total_students,
-                'present_students': present_students,
-                'absent_students': absent_students,
-                'attendance_rate': round(attendance_rate, 2),
-                'emotion_distribution': emotion_distribution,
-                'students_list': students_list
-            }
-            
-            serializer = ClassStatusSerializer(response_data)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(student_data, status=status.HTTP_200_OK)
             
         except Exception as e:
             return Response(
-                {'error': f'Error retrieving class status: {str(e)}'},
+                {'error': f'Error retrieving student overall status: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class GetStudentsDetailStatus(APIView):
+    """
+    API endpoint to get detailed status for all students
+    Returns a map where key is student name and value is overallAttendance, classMentioned and class breakdown data
+    """
     
-    def _calculate_student_class_status(self, emotion_summary):
+    def get(self, request):
         """
-        Calculate student's status for a specific class based on emotion data
+        Get detailed status for all students
+        
+        Returns:
+            Response: Map of student details with attendance and class breakdown
         """
-        if not emotion_summary:
-            return 'Unknown'
-        
-        # Calculate positive vs negative emotion scores
-        positive_emotions = ['happy', 'joy', 'excited', 'content', 'positive']
-        negative_emotions = ['sad', 'angry', 'fear', 'disgust', 'negative']
-        
-        positive_score = sum(emotion_summary.get(emotion, 0) for emotion in positive_emotions)
-        negative_score = sum(emotion_summary.get(emotion, 0) for emotion in negative_emotions)
-        
-        if positive_score > negative_score and positive_score > 0:
-            return 'Engaged'
-        elif negative_score > positive_score and negative_score > 0:
-            return 'Distracted'
-        else:
-            return 'Neutral'
+        try:
+            # Get all unique student IDs
+            student_ids = StudentData.objects.values_list('studentID', flat=True).distinct()
+            
+            students_detail = {}
+            for student_id in student_ids:
+                # Get all records for this student
+                student_records = StudentData.objects.filter(studentID=student_id)
+                
+                # Calculate overall attendance
+                total_classes = student_records.values('ClassID').distinct().count()
+                total_frames = student_records.count()
+                
+                # Get class breakdown data
+                class_breakdown = {}
+                unique_classes = student_records.values('ClassID').distinct()
+                
+                for class_data in unique_classes:
+                    class_id = class_data['ClassID']
+                    class_records = student_records.filter(ClassID=class_id)
+                    
+                    # Calculate emotion summary for this class
+                    emotion_summary = {}
+                    for record in class_records:
+                        if isinstance(record.Emotion, dict):
+                            for emotion, value in record.Emotion.items():
+                                if emotion in emotion_summary:
+                                    emotion_summary[emotion] += value
+                                else:
+                                    emotion_summary[emotion] = value
+                    
+                    class_breakdown[class_id] = {
+                        'framesAttended': class_records.count(),
+                        'emotionSummary': emotion_summary
+                    }
+                
+                students_detail[student_id] = {
+                    'overallAttendance': {
+                        'totalClasses': total_classes,
+                        'totalFrames': total_frames
+                    },
+                    'classMentioned': list(class_breakdown.keys()),
+                    'classBreakdown': class_breakdown
+                }
+            
+            return Response(students_detail, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error retrieving students detail status: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
-
+class GetClassDetailStatus(APIView):
+    """
+    API endpoint to get detailed status for all classes
+    Returns a map where key is classID and value is attendance rate, present students, emotion distribution and student breakdown
+    """
+    
+    def get(self, request):
+        """
+        Get detailed status for all classes
+        
+        Returns:
+            Response: Map of class details with attendance, emotions and student breakdown
+        """
+        try:
+            # Get all unique class IDs
+            class_ids = StudentData.objects.values_list('ClassID', flat=True).distinct()
+            
+            class_detail = {}
+            for class_id in class_ids:
+                # Get all records for this class
+                class_records = StudentData.objects.filter(ClassID=class_id)
+                
+                # Get unique students in this class
+                unique_students = class_records.values('studentID').distinct()
+                total_students = unique_students.count()
+                
+                # Calculate attendance rate
+                attendance_rate = 0.0
+                if total_students > 0:
+                    # Count students who have any records (attended)
+                    attended_students = total_students
+                    attendance_rate = (attended_students / total_students) * 100
+                
+                # Aggregate emotion distribution across all students in class
+                emotion_distribution = {}
+                for record in class_records:
+                    if isinstance(record.Emotion, dict):
+                        for emotion, value in record.Emotion.items():
+                            if emotion in emotion_distribution:
+                                emotion_distribution[emotion] += value
+                            else:
+                                emotion_distribution[emotion] = value
+                
+                # Get student breakdown data
+                student_breakdown = {}
+                for student_data in unique_students:
+                    student_id = student_data['studentID']
+                    student_records = class_records.filter(studentID=student_id)
+                    
+                    # Calculate student's emotion summary for this class
+                    student_emotion_summary = {}
+                    for record in student_records:
+                        if isinstance(record.Emotion, dict):
+                            for emotion, value in record.Emotion.items():
+                                if emotion in student_emotion_summary:
+                                    student_emotion_summary[emotion] += value
+                                else:
+                                    student_emotion_summary[emotion] = value
+                    
+                    student_breakdown[student_id] = {
+                        'framesAttended': student_records.count(),
+                        'emotionSummary': student_emotion_summary
+                    }
+                
+                class_detail[class_id] = {
+                    'attendanceRate': round(attendance_rate, 2),
+                    'presentStudents': total_students,
+                    'emotionDistribution': emotion_distribution,
+                    'studentBreakdown': student_breakdown
+                }
+            
+            return Response(class_detail, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error retrieving class detail status: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 # Additional utility views for development and testing

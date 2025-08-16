@@ -45,14 +45,156 @@ backend/
 
 ## API Endpoints
 
-### Core APIs
-- `GET /api/student/{student_id}/status/` - Get student overall status
-- `GET /api/class/{class_id}/status/` - Get class attendance status
-- `POST /api/class/add-data/` - Add class data pipeline
+All API endpoints are prefixed with `/api/`
 
-### Development APIs
+### Core APIs
+
+#### 1. GetAttendanceStatus
+**URL:** `/api/attendance-status/`  
+**Method:** GET  
+**Description:** Returns attendance rate of all classIDs as a list  
+**Response Format:**
+```json
+[
+  {
+    "classID": 101,
+    "attendanceRate": 85.5,
+    "totalStudents": 20,
+    "attendedStudents": 17
+  },
+  {
+    "classID": 102,
+    "attendanceRate": 92.0,
+    "totalStudents": 15,
+    "attendedStudents": 15
+  }
+]
+```
+
+#### 2. GetEmotionsStatus
+**URL:** `/api/emotions-status/`  
+**Method:** GET  
+**Description:** Returns emotions distribution of all classes as a list  
+**Response Format:**
+```json
+[
+  {
+    "classID": 101,
+    "emotionDistribution": {
+      "happy": 15.2,
+      "sad": 3.1,
+      "neutral": 8.7
+    }
+  },
+  {
+    "classID": 102,
+    "emotionDistribution": {
+      "happy": 12.5,
+      "excited": 5.3,
+      "neutral": 4.2
+    }
+  }
+]
+```
+
+#### 3. GetStudentOverallStatus
+**URL:** `/api/student-overall-status/`  
+**Method:** GET  
+**Description:** Returns a list of how many classes each student attended  
+**Response Format:**
+```json
+[
+  {
+    "studentID": "STU001",
+    "classesAttended": 3,
+    "totalFrames": 25
+  },
+  {
+    "studentID": "STU002",
+    "classesAttended": 2,
+    "totalFrames": 18
+  }
+]
+```
+
+#### 4. GetStudentsDetailStatus
+**URL:** `/api/students-detail-status/`  
+**Method:** GET  
+**Description:** Returns a map where the key is student name and the value is overallAttendance, classMentioned and class breakdown data  
+**Response Format:**
+```json
+{
+  "STU001": {
+    "overallAttendance": {
+      "totalClasses": 3,
+      "totalFrames": 25
+    },
+    "classMentioned": [101, 102, 103],
+    "classBreakdown": {
+      "101": {
+        "framesAttended": 10,
+        "emotionSummary": {
+          "happy": 8.5,
+          "neutral": 1.5
+        }
+      },
+      "102": {
+        "framesAttended": 8,
+        "emotionSummary": {
+          "happy": 6.2,
+          "sad": 1.8
+        }
+      }
+    }
+  }
+}
+```
+
+#### 5. GetClassDetailStatus
+**URL:** `/api/class-detail-status/`  
+**Method:** GET  
+**Description:** Returns a map where the key is the classID and the value is attendance rate, present students, emotion distribution and student breakdown  
+**Response Format:**
+```json
+{
+  "101": {
+    "attendanceRate": 85.5,
+    "presentStudents": 17,
+    "emotionDistribution": {
+      "happy": 15.2,
+      "sad": 3.1,
+      "neutral": 8.7
+    },
+    "studentBreakdown": {
+      "STU001": {
+        "framesAttended": 10,
+        "emotionSummary": {
+          "happy": 8.5,
+          "neutral": 1.5
+        }
+      },
+      "STU002": {
+        "framesAttended": 7,
+        "emotionSummary": {
+          "happy": 6.7,
+          "sad": 0.3
+        }
+      }
+    }
+  }
+}
+```
+
+### Development/Testing APIs
 - `GET /api/students/` - List all student records
 - `GET /api/students/{id}/` - Get specific student record
+
+## Data Model Notes
+
+- All attendance calculations are based on the presence of student records in the database
+- Emotion data is aggregated across all frames for each student/class
+- Attendance rates are calculated as percentages (0-100)
+- The system assumes that if a student has records for a class, they attended that class
 
 ## Setup Instructions
 
