@@ -275,29 +275,53 @@ python manage.py runserver
 - Add docstrings for all functions and classes
 - Include type hints where appropriate
 
-## TODO Implementation
+## Video Processing Pipeline
 
-The following features are marked for future implementation:
+The system includes a powerful video processing pipeline that automatically extracts attendance and emotion data from classroom videos.
 
-### GetStudentOverallStatus API
-- Calculate total classes vs attended classes
-- Compute overall attendance rate
-- Aggregate emotion data across classes
-- Determine overall status (Excellent/Good/Fair/Poor)
+### add_class_data Command
 
-### GetClassStatus API
-- Count total students in class
-- Calculate present vs absent students
-- Compute class attendance rate
-- Aggregate emotion distribution
-- Generate student status list
+The `add_class_data` command is a Django management command that processes video files and populates the database with student attendance and emotion data.
 
-### Class Data Pipeline
-- Process incoming class data
-- Handle multiple student records
-- Validate data integrity
-- Implement bulk insertion
-- Process emotion data
+#### Usage
+```bash
+python manage.py add_class_data <video_path> [--class-id CLASS_ID] [--frame-interval FRAME_INTERVAL]
+```
+
+#### Parameters
+- `video_path`: Path to the video file to process
+- `--class-id`: Class ID for the video (default: 1)
+- `--frame-interval`: Process every Nth frame (default: 30)
+
+#### Example
+```bash
+python manage.py add_class_data /path/to/classroom_video.mp4 --class-id 101 --frame-interval 30
+```
+
+#### How It Works
+
+1. **Video Processing**: The command reads the video file and extracts frames at specified intervals
+2. **Face Detection**: Uses YOLOv8 face detection model to identify faces in each frame
+3. **Face Tracking**: Tracks individual faces across frames using unique track IDs
+4. **Emotion Analysis**: Analyzes each detected face using DeepFace to extract emotion data
+5. **Student Recognition**: Matches detected faces against a database of known student faces
+6. **Data Population**: Creates StudentData records with:
+   - Student ID (from face recognition)
+   - Class ID (specified parameter)
+   - Frame ID (sequential frame number)
+   - Emotion data (JSON format with emotion scores)
+
+#### Requirements
+
+The command requires the following models and dependencies:
+- **YOLOv8 Face Detection Model**: `models/yolov8n-face-lindevs.onnx`
+- **Student Face Database**: `models/db/` directory containing known student face images
+- **DeepFace**: For emotion analysis and face recognition
+- **OpenCV**: For video processing
+
+#### Output
+
+The command processes the entire video and creates multiple `StudentData` records, one for each detected face in each processed frame. This data is then available through the API endpoints for attendance tracking and emotion analysis.
 
 ## Testing
 
