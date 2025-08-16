@@ -94,11 +94,14 @@ class Command(BaseCommand):
     def get_frames(self, video_path, frame_interval):
         cap = cv2.VideoCapture(video_path)
         frames = []
+        frame_id = 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-            frames.append(frame)
+            if frame_id % frame_interval == 0:
+                frames.append(frame)
+            frame_id += 1
         cap.release()
         return frames
     
