@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from deepface import DeepFace
 import cv2
 
-TRACK_MODEL_PATH = "attendance/management/commands/models/yolov8n-face-lindevs.onnx"
+TRACK_MODEL_PATH = "attendance/management/commands/yolov8n-face-lindevs.onnx"
 DB_PATH = "attendance/management/commands/db"
 
 class Command(BaseCommand):
@@ -57,8 +57,9 @@ class Command(BaseCommand):
         self.stdout.write(f'Class ID: {class_id}')
         self.stdout.write(f'Frame interval: {frame_interval}')
         
-        self.track_model = YOLO(TRACK_MODEL_PATH)
-
+        
+        self.track_model = self.get_track_model()
+        
         track_id_matches = {}
         
         data_set = []
@@ -96,6 +97,21 @@ class Command(BaseCommand):
             )
         
         self.stdout.write(self.style.SUCCESS(f'Added {len(data_set)} data points'))
+
+    def download_yolo_model(self):
+        import requests
+        link = "https://github.com/lindevs/yolov8-face/releases/latest/download/yolov8n-face-lindevs.onnx"
+        
+        if not os.path.exists(TRACK_MODEL_PATH):
+            response = requests.get(link)
+            with open(TRACK_MODEL_PATH, "wb") as f:
+                f.write(response.content)
+
+        
+    def get_track_model(self):
+        self.download_yolo_model()
+        
+        return YOLO(TRACK_MODEL_PATH)
 
 
     def get_frames(self, video_path, frame_interval):
