@@ -7,8 +7,8 @@ from ultralytics import YOLO
 from deepface import DeepFace
 import cv2
 
-TRACK_MODEL_PATH = "models/yolov8n-face-lindevs.onnx"
-DB_PATH = "models/db"
+TRACK_MODEL_PATH = "attendance/management/commands/models/yolov8n-face-lindevs.onnx"
+DB_PATH = "attendance/management/commands/db"
 
 class Command(BaseCommand):
     """
@@ -18,7 +18,7 @@ class Command(BaseCommand):
         python manage.py add_class_data <video_path> [--class-id CLASS_ID] [--frame-interval FRAME_INTERVAL]
     
     Example:
-        python manage.py add_class_data /path/to/video.mp4 --class-id 101 --frame-interval 30
+        python manage.py add_class_data /path/to/video.mp4 --class-id 101 --frame-interval 100
     """
     
     help = 'Process video file and add class attendance and emotion data'
@@ -38,7 +38,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--frame-interval',
             type=int,
-            default=30,
+            default=500,
             help='Process every Nth frame (default: 30)'
         )
     
@@ -58,14 +58,15 @@ class Command(BaseCommand):
         self.stdout.write(f'Frame interval: {frame_interval}')
         
         self.track_model = YOLO(TRACK_MODEL_PATH)
-        
-        frames = self.get_frames(video_path, frame_interval)
-        
+
         track_id_matches = {}
         
         data_set = []
         
-        for frame_id, frame in enumerate(frames):
+        for frame_id, frame in enumerate(self.get_frames(video_path, frame_interval)):
+            if frame_id % 5 == 0:
+                self.stdout.write(f'Processing frame {frame_id}')
+
             for track_id, box in self.get_boxes(frame):
                 if track_id not in track_id_matches:
                     track_id_matches[track_id] = {}
@@ -83,27 +84,31 @@ class Command(BaseCommand):
 
         for track_id, frame_id, emotions in data_set:
             student = track_student_mapping[track_id]
+            
+            if StudentData.objects.filter(studentID=student, ClassID=class_id, FramID=frame_id).exists():
+                continue
+            
             StudentData.objects.create(
-                student=student,
-                class_id=class_id,
-                frame_id=frame_id,
-                emotions=emotions
+                studentID=student,
+                ClassID=class_id,
+                FramID=frame_id,
+                Emotion=emotions
             )
+        
+        self.stdout.write(self.style.SUCCESS(f'Added {len(data_set)} data points'))
 
 
     def get_frames(self, video_path, frame_interval):
         cap = cv2.VideoCapture(video_path)
-        frames = []
         frame_id = 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
             if frame_id % frame_interval == 0:
-                frames.append(frame)
+                yield frame
             frame_id += 1
         cap.release()
-        return frames
     
     def get_boxes(self, frame):
         results = self.track_model.track(frame, persist=True, classes=[0])
@@ -126,7 +131,14 @@ class Command(BaseCommand):
         
         analysis = DeepFace.analyze(face_crop, actions=['emotion'], enforce_detection=False)
 
-        return analysis[0]['emotion']
+        emotions = analysis[0]['emotion']
+        
+        emotions_dict = {}
+        
+        for emotion, value in emotions.items():
+            emotions_dict[emotion] = float(value)   
+        
+        return emotions_dict
 
 
     def get_top_match(self, box, frame):
@@ -154,6 +166,8 @@ class Command(BaseCommand):
         
         for _, match in df.iterrows():
             matched_img_path = match['identity']
+            matched_img_path = matched_img_path.split('/')[-2]
+            
             distance = match['distance']
 
             top_match.append((matched_img_path, distance))
